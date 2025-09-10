@@ -1,0 +1,5 @@
+New feature! MyDB.txt is a file containing all your searches. Example:
+
+If you search for the nickname johndoe, this is db:
+
+johndoe | johndoemail@example.com

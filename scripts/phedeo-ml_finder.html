@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phedeo Email Finder</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+    * { box-sizing: border-box; margin:0; padding:0; }
+    body {
+        font-family: 'Inter', sans-serif;
+        height: 100vh;
+        background: #0f0f1e;
+        overflow: hidden;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: #fff;
+    }
+
+    canvas { position: absolute; top:0; left:0; z-index:0; }
+
+    .container {
+        position: relative;
+        z-index:1;
+        background: rgba(20,20,30,0.85);
+        border-radius: 20px;
+        padding: 50px;
+        width: 90%;
+        max-width: 500px;
+        text-align: center;
+        backdrop-filter: blur(15px);
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        transition: transform 0.3s ease;
+    }
+
+    .container:hover { transform: translateY(-5px); }
+
+    h1 {
+        font-size: 2.5rem;
+        margin-bottom: 15px;
+        background: linear-gradient(90deg, #f1c40f, #e67e22);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 0 10px rgba(241,196,15,0.5);
+    }
+
+    p { color: #ccc; margin-bottom: 30px; font-size:1rem; }
+
+    .input-container {
+        display:flex;
+        gap:10px;
+        margin-bottom: 20px;
+    }
+
+    input {
+        flex:1;
+        padding: 15px;
+        font-size:1rem;
+        border-radius: 12px;
+        border: 2px solid rgba(241,196,15,0.8);
+        background: rgba(255,255,255,0.05);
+        color: #fff;
+        transition: 0.3s;
+    }
+
+    input:focus {
+        outline: none;
+        border-color: #e67e22;
+        box-shadow: 0 0 15px rgba(230,126,34,0.6);
+        background: rgba(255,255,255,0.1);
+    }
+
+    button {
+        padding: 15px 25px;
+        font-size: 1rem;
+        font-weight:600;
+        border:none;
+        border-radius:12px;
+        cursor:pointer;
+        background: linear-gradient(135deg, #f1c40f, #e67e22);
+        color:#1d1f20;
+        transition: all 0.3s ease;
+        box-shadow: 0 5px 15px rgba(230,126,34,0.3);
+    }
+
+    button:hover {
+        transform: scale(1.05);
+        box-shadow: 0 10px 25px rgba(230,126,34,0.5);
+    }
+
+    #loading {
+        font-size:1rem;
+        color:#f1c40f;
+        margin-bottom: 20px;
+        display:none;
+        animation: pulse 1.2s infinite;
+    }
+
+    @keyframes pulse {
+        0%,100%{ opacity:0.3; }
+        50%{ opacity:1; }
+    }
+
+    #result {
+        background: rgba(255,255,255,0.05);
+        padding: 15px;
+        border-radius: 12px;
+        min-height: 50px;
+        font-weight:600;
+        color:#fff;
+        transition: all 0.3s ease;
+        word-break: break-word;
+    }
+
+    #result p { margin:0; }
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+
+<div class="container">
+    <h1>Phedeo Email Finder</h1>
+    <p>Discover public emails on GitHub by username.</p>
+
+    <div class="input-container">
+        <input type="text" id="username" placeholder="GitHub Username">
+        <button onclick="findEmail()">Find</button>
+    </div>
+
+    <p id="loading">Searching...</p>
+    <div id="result"></div>
+</div>
+
+<script>
+
+const canvas = document.getElementById('bg');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const particles = [];
+for(let i=0;i<120;i++){
+    particles.push({
+        x: Math.random()*canvas.width,
+        y: Math.random()*canvas.height,
+        r: Math.random()*2+1,
+        dx: (Math.random()-0.5)*0.5,
+        dy: (Math.random()-0.5)*0.5
+    });
+}
+
+function animateParticles(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    for(const p of particles){
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        ctx.fillStyle = 'rgba(241,196,15,0.5)';
+        ctx.fill();
+        p.x += p.dx; p.y += p.dy;
+        if(p.x<0||p.x>canvas.width) p.dx*=-1;
+        if(p.y<0||p.y>canvas.height) p.dy*=-1;
+    }
+    requestAnimationFrame(animateParticles);
+}
+animateParticles();
+
+window.addEventListener('resize',()=>{
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+});
+
+
+async function findEmail() {
+    const username = document.getElementById('username').value.trim();
+    if(!username){ alert('Please enter a username'); return; }
+
+    const resultEl = document.getElementById('result');
+    const loadingEl = document.getElementById('loading');
+    resultEl.innerHTML=''; loadingEl.style.display='block';
+
+    const headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "Phedeo-Email-Finder"
+    };
+
+    try {
+        let email = await getEmailFromProfile(username, headers);
+        if(!email) email = await getEmailFromEvents(username, headers);
+        if(!email) email = await getEmailFromCommitSearch(username, headers);
+
+        loadingEl.style.display='none';
+        resultEl.innerHTML = email? `<p>Email found: <b>${email}</b></p>` : `<p>No public email found for <b>${username}</b>.</p>`;
+    } catch(e){
+        loadingEl.style.display='none';
+        resultEl.innerHTML = '<p>Error occurred while searching.</p>';
+        console.error(e);
+    }
+}
+
+async function getEmailFromProfile(username, headers){
+    const res = await fetch(`https://api.github.com/users/${username}`,{headers});
+    if(res.ok){ const data = await res.json(); return data.email; }
+    return null;
+}
+
+async function getEmailFromEvents(username, headers){
+    const res = await fetch(`https://api.github.com/users/${username}/events/public`,{headers});
+    if(res.ok){
+        const events = await res.json();
+        for(const e of events){
+            if(e.type==='PushEvent'){
+                for(const commit of (e.payload.commits||[])){
+                    const email=commit.author.email;
+                    if(email && !email.includes('noreply')) return email;
+                }
+            }
+        }
+    }
+    return null;
+}
+
+async function getEmailFromCommitSearch(username, headers){
+    const res = await fetch(`https://api.github.com/search/commits?q=author:${username}`,{
+        headers:{...headers,"Accept":"application/vnd.github.cloak-preview"}
+    });
+    if(res.ok){
+        const data = await res.json();
+        for(const item of (data.items||[])){
+            const email=item.commit.author.email;
+            if(email && !email.includes('noreply')) return email;
+        }
+    }
+    return null;
+}
+</script>
+
+</body>
+</html>
